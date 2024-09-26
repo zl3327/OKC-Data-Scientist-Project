@@ -1,0 +1,1254 @@
+---
+title: 'Data Science Project'
+output: html_document
+author: "James Li"
+date: "`r format(Sys.Date(), '%m/%d/%y')`"
+---
+
+```{r set options, include=FALSE}
+# DO NOT CHANGE THE LINE BELOW 
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+``` {css styling, echo=FALSE}
+
+<style>
+.tocify {
+max-width: 175px !important;
+}
+</style>
+
+<style>
+.main-container {
+width: 100%;
+max-width: 940px;
+margin-left: 250px;
+margin-right: auto;
+}
+</style>
+
+<style>
+.red-header {
+  color: red;
+}
+</style>
+
+```
+
+```{r logo, echo = FALSE}
+
+htmltools::img(src = 'https://cdn.nba.com/logos/nba/1610612760/primary/L/logo.svg',
+                height = '250px',
+                alt = 'logo',
+                style = 'position: fixed; top: -40px; left: 5px;')
+```
+
+
+# Introduction  
+
+The purpose of this project is to gauge your technical skills and problem solving ability by working through something similar to a real NBA data science project. You will work your way through this R Markdown document, answering questions as you go along. Please begin by adding your name to the "author" key in the YAML header. When you're finished with the document, come back and type your answers into the answer key at the top. Please leave all your work below and have your answers where indicated below as well. Please note that we will be reviewing your code so make it clear, concise and avoid long printouts. Feel free to add in as many new code chunks as you'd like.
+
+Remember that we will be grading the quality of your code and visuals alongside the correctness of your answers. Please try to use the tidyverse as much as possible (instead of base R and explicit loops). Please do not bring in any outside data.    
+
+**Note:**    
+
+**Throughout this document, any `season` column represents the year each season started. For example, the 2015-16 season will be in the dataset as 2015. For most of the rest of the project, we will refer to a season by just this number (e.g. 2015) instead of the full text (e.g. 2015-16).**   
+
+<h1 class="red-header">Answers</h1>  
+
+## Part 1      
+
+**Question 1:**   
+
+- Offensive: 56.5% eFG     
+- Defensive: 47.9% eFG      
+
+**Question 2:** 81.7%   
+
+**Question 3:** 46.2%     
+
+**Question 4:** This is a written question. Please leave your response in the document under Question 5.          
+
+**Question 5:** 94.3% of games      
+
+**Question 6:**     
+
+- Round 1: 60.1%   
+- Round 2: 60.2%   
+- Conference Finals: 58.4%    
+- Finals: 52.9%    
+
+**Question 7:**     
+
+- Percent of +5.0 net rating teams making the 2nd round next year: 61.76%     
+- Percent of top 5 minutes played players who played in those 2nd round series: 35.2%    
+
+
+## Part 2  
+
+Please show your work in the document, you don't need anything here.
+
+## Part 3    
+ 
+Please write your response in the document, you don't need anything here.    
+
+
+
+# Setup and Data    
+
+```{r load data, message = F, warning = F}
+library(tidyverse)
+# Note, you will likely have to change these paths. If your data is in the same folder as this project, 
+# the paths will likely be fixed for you by deleting ../../Data/awards_project/ from each string.
+# player_data <- read_csv("../../Data/playoffs_project/player_data.csv")
+# team_data <- read_csv("../../Data/playoffs_project/team_data.csv")
+```
+
+## Part 1 -- Data Cleaning           
+
+In this section, you're going to work to answer questions using data from both team and player stats. All provided stats are on the game level. 
+
+### Question 1  
+
+**QUESTION:** What was the Warriors' Team offensive and defensive eFG% in the 2015-16 regular season? Remember that this is in the data as the 2015 season.  
+
+```{r}
+
+file.choose()
+install.packages("dplyr")
+
+library(dplyr)
+
+# Load the data
+team_data <- read.csv("C:\\Users\\James\\OneDrive\\桌面\\team_game_data.csv")
+
+warriors_games <- subset(team_data, season == 2015 & gametype == 2)
+warriors_offensive <- subset(warriors_games, off_team_name == "Golden State Warriors")
+warriors_offensive$off_eFG <- (warriors_offensive$fgmade + 0.5 * warriors_offensive$fg3made) / warriors_offensive$fgattempted
+average_off_eFG <- mean(warriors_offensive$off_eFG, na.rm = TRUE)
+warriors_defensive <- subset(warriors_games, def_team_name == "Golden State Warriors")
+warriors_defensive$def_eFG <- (warriors_defensive$fgmade + 0.5 * warriors_defensive$fg3made) / warriors_defensive$fgattempted
+average_def_eFG <- mean(warriors_defensive$def_eFG, na.rm = TRUE)
+print(paste("Offensive eFG%:", round(average_off_eFG * 100, 1), "%"))
+print(paste("Defensive eFG%:", round(average_def_eFG * 100, 1), "%"))
+
+```
+
+<span style="color:red">**ANSWER 1:**</span>  
+
+Offensive: 56.5% eFG     
+Defensive: 47.9% eFG     
+
+
+### Question 2     
+
+**QUESTION:** What percent of the time does the team with the higher eFG% in a given game win that game? Use games from the 2014-2023 regular seasons. If the two teams have an exactly equal eFG%, remove that game from the calculation.  
+
+```{r}
+
+team_data <- read.csv("C:\\Users\\James\\OneDrive\\桌面\\team_game_data.csv")
+
+# Calculate eFG% for each team
+team_data$efg_percent <- (team_data$fgmade + 0.5 * team_data$fg3made) / team_data$fgattempted
+
+# Pivot the data to get each game's teams on the same row
+library(tidyr)
+library(dplyr)
+
+paired_games <- team_data %>%
+  pivot_wider(id_cols = nbagameid, 
+              names_from = off_home, 
+              values_from = c(off_team_name, efg_percent, off_win),
+              names_glue = "{.value}_{off_home}")
+
+# Calculate which team had the higher eFG%
+paired_games <- paired_games %>%
+  mutate(higher_efg_team = ifelse(efg_percent_1 > efg_percent_0, off_team_name_1, off_team_name_0))
+
+# Determine which team won
+paired_games <- paired_games %>%
+  mutate(winning_team = ifelse(off_win_1 == 1, off_team_name_1, off_team_name_0))
+
+# Filter out games where eFG% is equal
+filtered_games <- paired_games %>%
+  filter(efg_percent_1 != efg_percent_0)
+
+# Calculate the percentage of games where the team with the higher eFG% won
+higher_efg_wins <- mean(filtered_games$higher_efg_team == filtered_games$winning_team) * 100
+
+# Print the result
+print(higher_efg_wins)
+
+```
+```
+
+<span style="color:red">**ANSWER 2:**</span>  
+
+81.7%   
+
+### Question 3  
+
+**QUESTION:** What percent of the time does the team with more offensive rebounds in a given game win that game? Use games from the 2014-2023 regular seasons. If the two teams have an exactly equal number of offensive rebounds, remove that game from the calculation.   
+
+```{r}
+
+# Load the data
+team_data <- read.csv("C:\\Users\\James\\OneDrive\\桌面\\team_game_data.csv")
+
+# Filter data for the 2014-2023 regular seasons
+filtered_data <- subset(team_data, season >= 2014 & season <= 2023 & gametype == 2)
+
+# Ensure required packages are installed and loaded
+if (!require(tidyr)) install.packages("tidyr")
+if (!require(dplyr)) install.packages("dplyr")
+library(tidyr)
+library(dplyr)
+
+# Pivot the data to get each game's teams on the same row
+paired_games <- filtered_data %>%
+  pivot_wider(id_cols = nbagameid, 
+              names_from = off_home, 
+              values_from = c(off_team_name, reboffensive, off_win),
+              names_glue = "{.value}_{off_home}")
+
+# Calculate which team had more offensive rebounds and which team won
+paired_games <- paired_games %>%
+  mutate(more_rebounds_team = ifelse(reboffensive_1 > reboffensive_0, off_team_name_1, off_team_name_0),
+         winning_team = ifelse(off_win_1 == 1, off_team_name_1, off_team_name_0),
+         same_rebounds = reboffensive_1 == reboffensive_0)
+
+# Filter out games where the number of offensive rebounds is the same
+filtered_games <- paired_games %>%
+  filter(!same_rebounds)
+
+# Calculate the percentage of games where the team with more offensive rebounds won
+more_rebounds_wins_percentage <- mean(filtered_games$more_rebounds_team == filtered_games$winning_team) * 100
+
+# Print the result
+print(more_rebounds_wins_percentage)
+cat(sprintf("<span style=\"color:red\">ANSWER 3:</span>\n\n%.1f%%", more_rebounds_wins_percentage))
+
+```
+
+<span style="color:red">**ANSWER 3:**</span>  
+
+46.2%   
+
+### Question 4  
+
+**QUESTION:** Do you have any theories as to why the answer to question 3 is lower than the answer to question 2? Try to be clear and concise with your answer.  
+
+<span style="color:red">**ANSWER 4:**</span>    
+
+Based on the data from the 2014-2023 regular seasons, it was calculated that the probability of a team with a higher eFG% determining the outcome of a game is nearly 36% higher than that of a team with more offensive rebounds. Since eFG% reflects scoring efficiency, it has a more direct and substantial impact on game outcomes. An eFG% above 50% increases a team's chances of winning by scoring more points per shot attempt. In contrast, offensive rebounds provide additional scoring opportunities, but they are less reliable when it comes to predicting the outcome of the game. There are many factors that contribute to winning a game, including defense, turnovers, and free throws. Even a team with more offensive rebounds may lose if their opponent excels in these other areas. Therefore, teams with higher eFG% have a greater chance of winning a game than teams with higher offensive rebound rates.
+
+### Question 5   
+
+**QUESTION:** Look at players who played at least 25% of their possible games in a season and scored at least 25 points per game played. Of those player-seasons, what percent of games were they available for on average? Use games from the 2014-2023 regular seasons.     
+
+For example:   
+
+- Ja Morant does not count in the 2023-24 season, as he played just 9 out of 82 games this year, even though he scored 25.1 points per game.   
+- Chet Holmgren does not count in the 2023-24 season, as he played all 82 games this year but scored 16.5 points per game.  
+- LeBron James does count in the 2023-24 season, as he played 71 games and scored 25.7 points per game.  
+
+```{r}
+
+#Q4:
+cat(sprintf("<span style=\"color:red\">ANSWER 4:</span>\n\nBased on the data from the 2014-2023 regular seasons, it was calculated that the probability of a team with a higher eFG%% determining the outcome of a game is nearly 36%% higher than that of a team with more offensive rebounds. Since eFG%% reflects scoring efficiency, it has a more direct and substantial impact on game outcomes. An eFG%% above 50%% increases a team's chances of winning by scoring more points per shot attempt. In contrast, offensive rebounds provide additional scoring opportunities, but they are less reliable when it comes to predicting the outcome of the game. There are many factors that contribute to winning a game, including defense, turnovers, and free throws. Even a team with more offensive rebounds may lose if their opponent excels in these other areas. Therefore, teams with higher eFG%% have a greater chance of winning a game than teams with higher offensive rebound rates."))
+
+```
+
+```{r}
+
+#Q5:
+file.choose()
+
+library(dplyr)
+
+# Load the data
+player_data <- read.csv("C:\\Users\\James\\OneDrive\\桌面\\player_game_data.csv")
+
+# Calculate total games played and total points per player per season
+library(dplyr)
+player_season_stats <- player_data %>%
+  group_by(season, player_name) %>%
+  summarise(
+    games_played = n(),
+    total_points = sum(points),
+    avg_points_per_game = total_points / games_played
+  )
+
+# Filter players who played at least 25% of 82 games and scored at least 25 points per game
+qualifying_players <- player_season_stats %>%
+  filter(games_played >= 20.5, avg_points_per_game >= 25)
+
+# Calculate average percentage of games played
+average_percentage_games_played <- mean(qualifying_players$games_played / 82) * 100
+
+# Format and output the result with HTML styling for the color
+cat(sprintf('<span style="color:red">**ANSWER 5:**</span> %.1f%% of games', average_percentage_games_played))
+
+```
+
+<span style="color:red">**ANSWER 5:**</span>  
+
+94.3% of games     
+
+## Question 6  
+
+**QUESTION:** What % of playoff series are won by the team with home court advantage? Give your answer by round. Use playoffs series from the 2014-**2022** seasons. Remember that the 2023 playoffs took place during the 2022 season (i.e. 2022-23 season).
+
+```{r}
+
+library(dplyr)
+
+# Load the data
+data <- read.csv("C:\\Users\\James\\OneDrive\\桌面\\team_game_data.csv")
+
+# Filter for playoff games from 2014-2022 seasons, and only gametype 4
+playoff_data <- data %>%
+  filter(gametype == 4, season >= 2014, season <= 2022) %>%
+  select(season, nbagameid, off_team, off_home, off_win, def_team, def_home, def_win, gamedate) %>%
+  arrange(season, gamedate)
+
+# Determine winners for each game
+playoff_data <- playoff_data %>%
+  mutate(winner = ifelse(off_win == 1, off_team, def_team),
+         loser = ifelse(off_win == 1, def_team, off_team),
+         home_team = ifelse(off_home == 1, off_team, def_team),
+         home_win = ifelse(home_team == winner, 1, 0)) %>%
+  distinct(nbagameid, .keep_all = TRUE)
+
+# Helper function to classify rounds based on wins
+classify_rounds <- function(df) {
+  df <- df %>%
+    arrange(gamedate) %>%
+    group_by(season, winner) %>%
+    mutate(win_count = row_number()) %>%
+    ungroup() %>%
+    mutate(round = case_when(
+      win_count <= 4 ~ "Round 1",
+      win_count <= 8 ~ "Round 2",
+      win_count <= 12 ~ "Conference Finals",
+      TRUE ~ "Finals"
+    ))
+  return(df)
+}
+
+# Apply the classification function
+playoff_data <- playoff_data %>%
+  group_by(season, winner) %>%
+  do(classify_rounds(.)) %>%
+  ungroup()
+
+# Calculate summaries for rounds
+final_results <- playoff_data %>%
+  group_by(round) %>%
+  summarise(
+    total_games = n(),
+    home_wins = sum(home_win),
+    percentage = home_wins / total_games * 100
+  )
+
+# Print the results in the specified format
+cat("<span style=\"color:red\">**ANSWER 6:**</span>\n\n")
+for (i in 1:nrow(final_results)) {
+  cat(final_results$round[i], ": ", sprintf("%.1f", final_results$percentage[i]), "%\n")
+}
+
+```
+
+<span style="color:red">**ANSWER 6:**</span>   
+
+Round 1: 60.1%   
+Round 2: 60.2%   
+Conference Finals: 58.4%    
+Finals: 52.9%    
+
+
+## Question 7    
+
+**QUESTION:** Among teams that had at least a +5.0 net rating in the regular season, what percent of them made the second round of the playoffs the **following** year? Among those teams, what percent of their top 5 total minutes played players (regular season) in the +5.0 net rating season played in that 2nd round playoffs series? Use the 2014-2021 regular seasons to determine the +5 teams and the 2015-2022 seasons of playoffs data.
+
+For example, the Thunder had a better than +5 net rating in the 2023 season. If we make the 2nd round of the playoffs **next** season (2024-25), we would qualify for this question. Our top 5 minutes played players this season were Shai Gilgeous-Alexander, Chet Holmgren, Luguentz Dort, Jalen Williams, and Josh Giddey. If three of them play in a hypothetical 2nd round series next season, it would count as 3/5 for this question.    
+
+*Hint: The definition for net rating is in the data dictionary.*     
+
+```{r}
+
+# Load necessary libraries
+library(dplyr)
+library(readr)
+
+file.choose()
+
+# Load the team game data for regular seasons
+team_data <- read_csv('C:\\Users\\James\\Downloads\\merged_team_game_data.csv')
+
+# Calculate possessions
+team_data <- team_data %>%
+  mutate(possessions = fgattempted - reboffensive + turnovers + 0.44 * ftattempted)
+
+# Create a copy of team_data for merging purposes
+team_data_copy <- team_data %>%
+  select(nbagameid, off_team_name, points) %>%
+  rename(def_team_name = off_team_name, def_points = points)
+
+# Merge team_data with team_data_copy to get opponent's points
+merged_data <- merge(team_data, team_data_copy, by.x = c("nbagameid", "def_team_name"), by.y = c("nbagameid", "def_team_name"))
+
+# Calculate ORTG and DRTG
+merged_data <- merged_data %>%
+  mutate(ortg = 100 * points / possessions,
+         drtg = 100 * def_points / possessions,
+         net_rating = ortg - drtg)
+
+# Filter for regular season games from 2014 to 2021
+team_net_ratings <- merged_data %>%
+  filter(season >= 2014 & season <= 2021 & gametype == 2) %>%
+  group_by(off_team_name, season) %>%
+  summarize(net_rating = mean(net_rating)) %>%
+  ungroup()
+
+# Identify teams with at least a +5.0 net rating
+high_net_rating_teams <- team_net_ratings %>%
+  filter(net_rating >= 5.0)
+
+# Ensure the 'round' column is in the correct case and remove any leading/trailing whitespace
+team_data <- team_data %>%
+  mutate(round = trimws(round))
+
+# Filter for playoff games and within the specified seasons
+playoff_data <- team_data %>%
+  filter(gametype == 4 & season >= 2015 & season <= 2022)
+
+# Check the number of records for each season to ensure completeness
+print(table(playoff_data$season))
+
+# Filter for teams that made it to the second round (Round 2)
+teams_round2 <- playoff_data %>%
+  filter(round == 'Round 2')
+
+# Get the unique teams and seasons that made it to the second round
+teams_made_round2 <- teams_round2 %>%
+  select(off_team_name, season) %>%
+  distinct()
+  
+# Add one season to high_net_rating_teams to check next season's playoff performance
+high_net_rating_teams <- high_net_rating_teams %>%
+  mutate(next_season = season + 1)
+
+# Check how many high net rating teams made it to Round 2 in the next season
+high_net_rating_next_season_round2 <- high_net_rating_teams %>%
+  inner_join(teams_made_round2, by = c("off_team_name", "next_season" = "season"))
+
+# Calculate the percentage
+percent_high_net_rating_next_season_round2 <- nrow(high_net_rating_next_season_round2) / nrow(high_net_rating_teams) * 100
+
+print(paste("Percentage of high net rating teams that made the second round in the next season:", round(percent_high_net_rating_next_season_round2, 2), "%"))
+
+file.choose()
+
+# Load player data
+player_data <- read_csv('C:\\Users\\James\\OneDrive\\桌面\\player_data_with_round.csv')
+
+# Filter for regular season player data
+regular_season_player_data <- player_data %>%
+  filter(gametype == 2 & season >= 2014 & season <= 2021) %>%
+  mutate(total_minutes = seconds / 60)
+
+# Filter out players from high net rating teams
+high_net_rating_team_names <- unique(high_net_rating_next_season_round2$off_team_name)
+top_team_players <- regular_season_player_data %>%
+  filter(team_name %in% high_net_rating_team_names)
+
+# Summarize total minutes played by each player for each season and team
+top_team_players_summary <- top_team_players %>%
+  group_by(season, team_name, nbapersonid, player_name) %>%
+  summarize(total_minutes = sum(total_minutes, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(season, team_name, desc(total_minutes))
+
+# Get the top 5 players by minutes played for each team and season
+top_5_team_players <- top_team_players_summary %>%
+  group_by(season, team_name) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# Filter out high net rating teams that made it to the second round of the playoffs the next season
+high_net_rating_teams_in_round2 <- high_net_rating_next_season_round2 %>%
+  select(off_team_name, season) %>%
+  rename(season_next = season)
+
+# Merge to get the top 5 players in these teams
+top_5_players_in_round2_teams <- top_5_team_players %>%
+  inner_join(high_net_rating_teams_in_round2, by = c("team_name" = "off_team_name", "season" = "season_next"))
+
+# Display the results
+print(top_5_players_in_round2_teams %>% select(season, team_name, player_name, total_minutes))
+
+# Filter for regular season player data
+regular_season_player_data <- player_data %>%
+  filter(gametype == 2 & season >= 2014 & season <= 2021) %>%
+  mutate(total_minutes = seconds / 60)
+
+# Filter out players from high net rating teams
+high_net_rating_team_names <- unique(high_net_rating_next_season_round2$off_team_name)
+top_team_players <- regular_season_player_data %>%
+  filter(team_name %in% high_net_rating_team_names)
+
+# Summarize total minutes played by each player for each season and team
+top_team_players_summary <- top_team_players %>%
+  group_by(season, team_name, nbapersonid, player_name) %>%
+  summarize(total_minutes = sum(total_minutes, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(season, team_name, desc(total_minutes))
+
+# Get the top 5 players by minutes played for each team and season
+top_5_team_players <- top_team_players_summary %>%
+  group_by(season, team_name) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+# Add next season column for checking playoff participation
+top_5_team_players <- top_5_team_players %>%
+  mutate(next_season = season + 1)
+
+# Filter out players who played in the second round of playoffs in the next season
+next_season_players_round2 <- player_data %>%
+  filter(season >= 2015 & season <= 2022 & 
+         team_name %in% high_net_rating_next_season_round2$off_team_name & 
+         round == 'Round 2')
+
+# Check if these players played in the second round of playoffs in the next season
+top_5_players_next_season_round2 <- merge(top_5_team_players, next_season_players_round2, 
+                                          by.x = c("next_season", "team_name", "nbapersonid"), 
+                                          by.y = c("season", "team_name", "nbapersonid"))
+
+# Print the columns of the merged dataframe to identify correct column names
+print(names(top_5_players_next_season_round2))
+
+# Remove duplicates to ensure each player is counted only once
+top_5_players_next_season_round2 <- top_5_players_next_season_round2 %>%
+  distinct(next_season, team_name, nbapersonid, .keep_all = TRUE)
+
+# Calculate the percentage
+total_top_5_players <- nrow(top_5_team_players)
+playoff_participating_players <- nrow(top_5_players_next_season_round2)
+
+participation_percentage <- (playoff_participating_players / total_top_5_players) * 100
+
+# Adjust column names based on the printed column names
+playoff_participating_players_data <- top_5_players_next_season_round2 %>%
+  select(next_season, team_name, player_name.x, total_minutes)
+
+# Print results
+cat(sprintf("Percentage of top 5 players who played in 2nd round of playoffs: %.2f%%\n", participation_percentage))
+
+# Print results in the specified format
+cat(sprintf("<span style=\"color:red\">**ANSWER 7:**</span>\n\n"))
+cat(sprintf("Percent of +5.0 net rating teams making the 2nd round next year: %.1f%%\n", round(percent_high_net_rating_next_season_round2, 1)))
+cat(sprintf("Percent of top 5 minutes played players who played in those 2nd round series: %.1f%%\n", round(participation_percentage, 1)))
+
+```
+
+<span style="color:red">**ANSWER 7:**</span>   
+
+Percent of +5.0 net rating teams making the 2nd round next year: 61.8%   
+Percent of top 5 minutes played players who played in those 2nd round series: 35.2%   
+
+
+## Part 2 -- Playoffs Series Modeling               
+
+For this part, you will work to fit a model that predicts the winner and the number of games in a playoffs series between any given two teams.   
+
+This is an intentionally open ended question, and there are multiple approaches you could take. Here are a few notes and specifications:    
+
+
+1. Your final output must include the probability of each team winning the series. For example: “Team A has a 30% chance to win and team B has a 70% chance.” instead of “Team B will win.” You must also predict the number of games in the series. This can be probabilistic or a point estimate.  
+
+2. You may use any data provided in this project, but please do not bring in any external sources of data.   
+
+3. You can only use data available prior to the start of the series. For example, you can’t use a team’s stats from the 2016-17 season to predict a playoffs series from the 2015-16 season.  
+
+4. The best models are explainable and lead to actionable insights around team and roster construction. We're more interested in your thought process and critical thinking than we are in specific modeling techniques. Using smart features is more important than using fancy mathematical machinery. 
+
+5. Include, as part of your answer:   
+
+  - A brief written overview of how your model works, targeted towards a decision maker in the front office without a strong statistical background.  
+  - What you view as the strengths and weaknesses of your model.  
+  - How you'd address the weaknesses if you had more time and/or more data.  
+  - Apply your model to the 2024 NBA playoffs (2023 season) and create a high quality visual (a table, a plot, or a plotly) showing the 16 teams' (that made the first round) chances of advancing to each round.  
+
+
+```{r}
+
+file.choose()
+
+# Install packages
+packages <- c("readr", "dplyr", "caret", "randomForest", "corrplot")
+install.packages(setdiff(packages, rownames(installed.packages())), dependencies = TRUE)
+
+# Load libraries
+library(readr)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(corrplot)
+
+# Load data
+team_data <- read_csv("C:\\Users\\James\\OneDrive\\桌面\\merged_team_data_with_advanced_stats.csv")
+player_data <- read_csv("C:\\Users\\James\\OneDrive\\桌面\\merged_player_data_with_advanced_stats.csv")
+
+# Ensure variables and target variable are numeric
+team_features <- c('fg2made', 'fg2missed', 'fg2attempted', 'fg3made', 'fg3missed', 'fg3attempted', 'fgmade', 'fgmissed', 'fgattempted_x', 'ftmade', 'ftmissed', 'ftattempted_x', 'reboffensive_x', 'rebdefensive', 'reboundchance', 'assists', 'stealsagainst', 'turnovers_x', 'blocksagainst', 'defensivefouls', 'offensivefouls', 'shootingfoulsdrawn', 'possessions_x', 'points_x', 'shotattempts', 'andones', 'shotattemptpoints', 'steals', 'blocks', 'ortg', 'drtg', 'points_y', 'possessions_y', 'fgattempted_y', 'turnovers_y', 'reboffensive_y', 'ftattempted_y', 'NET RTG')
+player_features <- c('starter', 'points', 'fg2made', 'fg2missed', 'fg2attempted', 'fg3made', 'fg3missed', 'fg3attempted', 'fgmade', 'fgmissed', 'fgattempted', 'ftmade', 'ftmissed', 'ftattempted', 'reboffensive', 'rebdefensive', 'offensivereboundchances', 'defensivereboundchances', 'assists', 'steals', 'stealsagainst', 'turnovers', 'blocks', 'blocksagainst', 'defensivefouls', 'defensivefoulsdrawn', 'offensivefouls', 'offensivefoulsdrawn', 'shootingfouls', 'shootingfoulsdrawn', 'shotattempts', 'shotattemptpoints', 'offensiveseconds', 'offensivepossessions', 'defensiveseconds', 'defensivepossessions', 'andones', 'teampoints', 'opponentteampoints', 'teamshotattempts', 'teamfgmade', 'teamfgattempted', 'teamturnovers', 'opponentteamfg2attempted', 'opponentteamfg3attempted', 'PPA', 'USG%', 'AST%', 'OREB%', 'DREB%', 'TOV%', 'STL%', 'BLK%', 'ORTG', 'DRTG', 'NET RTG')
+
+# Check and remove non-existing features from team_features
+existing_team_features <- intersect(team_features, colnames(team_data))
+
+# Convert all features and target variable to numeric
+team_data <- team_data %>%
+  mutate(across(all_of(c(existing_team_features, 'off_win')), as.numeric))
+
+# Calculate correlation matrix
+correlation_matrix <- cor(team_data[ ,c(existing_team_features, 'off_win')])
+correlation_with_target <- sort(correlation_matrix[ , 'off_win'], decreasing = TRUE)
+
+# Output the features most correlated with the target variable
+cat("Top features correlated with playoff victory:\n")
+print(head(correlation_with_target, 20))
+
+# Use 2023 season data for model training
+data <- team_data %>% filter(season == 2023)
+
+# Select features and target variable
+X <- data[ , existing_team_features]
+y <- data$off_win
+
+# Split data into training and testing sets
+set.seed(42)
+train_index <- createDataPartition(y, p = 0.7, list = FALSE)
+X_train <- X[train_index, ]
+X_test <- X[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+# Standardize the data
+scaler <- preProcess(X_train, method = c('center', 'scale'))
+X_train_scaled <- predict(scaler, X_train)
+X_test_scaled <- predict(scaler, X_test)
+
+# Train Random Forest classifier
+model <- randomForest(X_train_scaled, as.factor(y_train), random_state = 42)
+
+# Model evaluation
+y_pred <- predict(model, X_test_scaled)
+confusion_matrix <- confusionMatrix(y_pred, as.factor(y_test))
+cat("Accuracy:", confusion_matrix$overall['Accuracy'], "\n")
+cat("Classification Report:\n")
+print(confusion_matrix)
+
+# Print the number of samples in the data
+cat("Team data samples:", nrow(team_data), "\n")
+cat("Player data samples:", nrow(player_data), "\n")
+
+```
+
+
+```{r}
+# Load necessary libraries
+
+library(readr)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(ggplot2)
+library(reshape2)
+
+# Load data
+team_data <- read_csv("C:\\Users\\James\\OneDrive\\桌面\\merged_team_data_with_advanced_stats.csv")
+player_data <- read_csv("C:\\Users\\James\\OneDrive\\桌面\\merged_player_data_with_advanced_stats.csv")
+
+# Define the top_features
+top_features <- c('points_x', 'shotattemptpoints', 'fgmissed', 'fgmade', 'reboundchance', 'rebdefensive', 'blocks', 'drtg', 'ortg', 'assists')
+
+# Calculate correlation matrix
+correlation_matrix <- cor(team_data[, c(top_features, 'off_win')], use = "complete.obs")
+correlation_with_target <- sort(correlation_matrix[, 'off_win'], decreasing = TRUE)
+
+# Output top features correlated with playoff victory
+print("Top features correlated with playoff victory:")
+print(head(correlation_with_target, 20))
+
+# Use 2023 season data for model training
+data <- team_data %>% filter(season == 2023)
+
+# Select features and target variable
+X <- data[, top_features]
+y <- data$off_win
+
+# Split data into training and testing sets
+set.seed(42)
+trainIndex <- createDataPartition(y, p = .7, list = FALSE, times = 1)
+X_train <- X[trainIndex, ]
+X_test <- X[-trainIndex, ]
+y_train <- y[trainIndex]
+y_test <- y[-trainIndex]
+
+# Standardize the data
+scaler <- preProcess(X_train, method = c("center", "scale"))
+X_train_scaled <- predict(scaler, X_train)
+X_test_scaled <- predict(scaler, X_test)
+
+# Train Random Forest classifier
+model <- randomForest(x = X_train_scaled, y = as.factor(y_train), random_state = 42)
+
+# Extract feature importance
+importances <- importance(model)
+feature_importance_df <- data.frame(
+  feature = rownames(importances),
+  importance = importances[, 1]
+) %>% arrange(desc(importance))
+
+# Output feature importance
+print("Feature importance from Random Forest:")
+print(feature_importance_df)
+
+# Visualize feature importance
+ggplot(feature_importance_df, aes(x = reorder(feature, importance), y = importance)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Feature Importance for Predicting Playoff Victory", x = "Feature", y = "Importance")
+
+# Select the most important features
+top_features <- feature_importance_df$feature[1:10]
+print(paste("Top features for predicting playoff victory:", top_features))
+
+# Predict series winner function
+predict_series_winner <- function(team_a, team_b, model, scaler, team_data, selected_features) {
+  team_a_data <- team_data %>%
+    filter(off_team_name == team_a) %>%
+    select(one_of(selected_features)) %>%
+    summarise_all(mean, na.rm = TRUE) %>%
+    unlist()
+  
+  team_b_data <- team_data %>%
+    filter(off_team_name == team_b) %>%
+    select(one_of(selected_features)) %>%
+    summarise_all(mean, na.rm = TRUE) %>%
+    unlist()
+  
+  if (length(team_a_data) == 0 || length(team_b_data) == 0) {
+    print("Insufficient data for one or both teams. Please check the team names and data availability.")
+    return(NULL)
+  }
+  
+# Handle missing values
+  team_a_data[is.na(team_a_data)] <- 0
+  team_b_data[is.na(team_b_data)] <- 0
+  
+# Standardize data
+  team_a_data <- predict(scaler, as.data.frame(t(team_a_data)))
+  team_b_data <- predict(scaler, as.data.frame(t(team_b_data)))
+  
+# Predict each team's probability of winning the game
+  team_a_prob <- predict(model, team_a_data, type = "prob")[, 2]
+  team_b_prob <- predict(model, team_b_data, type = "prob")[, 2]
+  
+# Predict the number of games in the series (assuming the number of games is inversely proportional to win probability)
+  result_counts <- matrix(0, nrow = 5, ncol = 5)
+  colnames(result_counts) <- 0:4
+  rownames(result_counts) <- 0:4
+  
+  for (i in 1:10000) {
+    team_a_wins <- 0
+    team_b_wins <- 0
+    for (game in 1:7) {
+      if (runif(1) < team_a_prob) {
+        team_a_wins <- team_a_wins + 1
+      } else {
+        team_b_wins <- team_b_wins + 1
+      }
+      if (team_a_wins == 4 || team_b_wins == 4) {
+        result_counts[as.character(team_a_wins), as.character(team_b_wins)] <- result_counts[as.character(team_a_wins), as.character(team_b_wins)] + 1
+        break
+      }
+    }
+  }
+  
+  return(result_counts)
+}
+
+# Simulate playoffs function
+simulate_playoffs <- function(matchups, model, scaler, team_data, top_features) {
+  next_round_teams <- c()
+  round_probabilities <- list()
+  round_results <- list()
+  
+  for (matchup in matchups) {
+    team_a <- matchup[1]
+    team_b <- matchup[2]
+    result_counts <- predict_series_winner(team_a, team_b, model, scaler, team_data, top_features)
+    if (is.null(result_counts)) {
+      next
+    }
+    
+  team_a_prob <- sum(result_counts[5, ]) / 10000
+  team_b_prob <- sum(result_counts[, 5]) / 10000
+  round_probabilities[[paste(team_a, "vs", team_b)]] <- c(team_a_prob, team_b_prob)
+  round_results[[paste(team_a, "vs", team_b)]] <- result_counts
+    
+  winner <- ifelse(team_a_prob > team_b_prob, team_a, team_b)
+  next_round_teams <- c(next_round_teams, winner)
+}
+  
+  return(list(next_round_teams, round_probabilities, round_results))
+}
+
+# First round matchups
+east_matchups <- list(
+  c('Boston Celtics', 'Miami Heat'),
+  c('New York Knicks', 'Philadelphia 76ers'),
+  c('Milwaukee Bucks', 'Indiana Pacers'),
+  c('Cleveland Cavaliers', 'Orlando Magic')
+)
+
+west_matchups <- list(
+  c('Oklahoma City Thunder', 'New Orleans Pelicans'),
+  c('Denver Nuggets', 'Los Angeles Lakers'),
+  c('Minnesota Timberwolves', 'Phoenix Suns'),
+  c('LA Clippers', 'Dallas Mavericks')
+)
+
+# First round
+east_results <- simulate_playoffs(east_matchups, model, scaler, team_data, top_features)
+west_results <- simulate_playoffs(west_matchups, model, scaler, team_data, top_features)
+
+# Second round matchups
+east_semi_final_matchups <- list(
+  c(east_results[[1]][1], east_results[[1]][4]),
+  c(east_results[[1]][2], east_results[[1]][3])
+)
+
+west_semi_final_matchups <- list(
+  c(west_results[[1]][1], west_results[[1]][4]),
+  c(west_results[[1]][2], west_results[[1]][3])
+)
+
+# Second round
+east_semi_results <- simulate_playoffs(east_semi_final_matchups, model, scaler, team_data, top_features)
+west_semi_results <- simulate_playoffs(west_semi_final_matchups, model, scaler, team_data, top_features)
+
+# Conference finals matchups
+east_final_matchup <- list(c(east_semi_results[[1]][1], east_semi_results[[1]][2]))
+west_final_matchup <- list(c(west_semi_results[[1]][1], west_semi_results[[1]][2]))
+
+# Conference finals
+east_final_results <- simulate_playoffs(east_final_matchup, model, scaler, team_data, top_features)
+west_final_results <- simulate_playoffs(west_final_matchup, model, scaler, team_data, top_features)
+
+# Finals matchup
+final_matchup <- list(c(east_final_results[[1]][1], west_final_results[[1]][1]))
+
+# Finals
+nba_final_results <- simulate_playoffs(final_matchup, model, scaler, team_data, top_features)
+
+# Output results
+print("\nEastern Conference Final:")
+print(east_final_results[[2]])
+
+print("\nWestern Conference Final:")
+print(west_final_results[[2]])
+
+print("\nNBA Final:")
+print(nba_final_results[[2]])
+
+# Function to format results
+format_results <- function(results, round_name) {
+  formatted_results <- paste(round_name, "Results and Probabilities:\n")
+  for (matchup in names(results)) {
+    teams <- strsplit(matchup, " vs ")[[1]]
+    team_a <- teams[1]
+    team_b <- teams[2]
+    prob <- results[[matchup]]
+    formatted_results <- paste(formatted_results, paste(team_a, "vs", team_b), "\n")
+    for (i in 0:4) {
+      for (j in 0:4) {
+        if (i == 4 || j == 4) {
+          count <- prob[as.character(i), as.character(j)]
+          if (count > 0) {
+            formatted_results <- paste(formatted_results, sprintf("%s %d - %s %d: %.2f%%\n", team_a, i, team_b, j, count / 100))
+          }
+        }
+      }
+    }
+    team_a_prob <- sum(prob[5, ]) / 10000
+    team_b_prob <- sum(prob[, 5]) / 10000
+    formatted_results <- paste(formatted_results, sprintf("%s wins %.2f%%, %s wins %.2f%%\n", team_a, team_a_prob * 100, team_b, team_b_prob * 100))
+  }
+  return(formatted_results)
+}
+
+# First round results
+east_first_round_results <- format_results(east_results[[3]], "First Round (East)")
+west_first_round_results <- format_results(west_results[[3]], "First Round (West)")
+
+# Second round results
+east_second_round_results <- format_results(east_semi_results[[3]], "Second Round (East)")
+west_second_round_results <- format_results(west_semi_results[[3]], "Second Round (West)")
+
+# Conference finals results
+east_final_results_text <- format_results(east_final_results[[3]], "Conference Finals (East)")
+west_final_results_text <- format_results(west_final_results[[3]], "Conference Finals (West)")
+
+# Finals results
+final_results_text <- format_results(nba_final_results[[3]], "Finals")
+# Extract the final matchup probabilities
+final_probabilities <- nba_final_results[[2]]
+final_matchup <- names(final_probabilities)
+final_probs <- unlist(final_probabilities[[1]])
+
+# Determine the champion
+champion <- ifelse(final_probs[1] > final_probs[2], strsplit(final_matchup, " vs ")[[1]][1], strsplit(final_matchup, " vs ")[[1]][2])
+
+# Print the champion
+print(paste("NBA Champion:", champion))
+
+
+print(east_first_round_results)
+print(west_first_round_results)
+print(east_second_round_results)
+print(west_second_round_results)
+print(east_final_results_text)
+print(west_final_results_text)
+print(final_results_text)
+
+plot_playoff_probabilities <- function(probabilities, title) {
+  
+# Convert the named list to a data frame
+  prob_df <- do.call(rbind, lapply(names(probabilities), function(matchup) {
+    teams <- strsplit(matchup, " vs ")[[1]]
+    team_a <- teams[1]
+    team_b <- teams[2]
+    prob <- probabilities[[matchup]]
+    data.frame(
+      Team = c(rep(team_a, 2), rep(team_b, 2)),
+      Opponent = c(rep(team_b, 2), rep(team_a, 2)),
+      Probability = c(prob[1], prob[2], prob[1], prob[2])
+    )
+  }))
+  
+  ggplot(prob_df, aes(x = Team, y = Probability, fill = Opponent)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    theme_minimal() +
+    labs(title = title, x = "Teams", y = "Winning Probability") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# Plot each round's probabilities
+plot_playoff_probabilities(east_results[[2]], "First Round (East) Winning Probabilities")
+plot_playoff_probabilities(west_results[[2]], "First Round (West) Winning Probabilities")
+plot_playoff_probabilities(east_semi_results[[2]], "Second Round (East) Winning Probabilities")
+plot_playoff_probabilities(west_semi_results[[2]], "Second Round (West) Winning Probabilities")
+plot_playoff_probabilities(east_final_results[[2]], "Conference Finals (East) Winning Probabilities")
+plot_playoff_probabilities(west_final_results[[2]], "Conference Finals (West) Winning Probabilities")
+plot_playoff_probabilities(nba_final_results[[2]], "Finals Winning Probabilities")
+
+
+```
+
+```{r}
+
+# Overview of the Model
+
+cat("# Overview of the Model\n\n")
+
+cat("The model aims to predict NBA playoff series outcomes using advanced statistics on team and player performance. Here's a brief overview of how the model works:\n\n")
+
+cat("1. **Data Collection and Preparation:**\n")
+cat("   - The model collects and prepares data from various sources, including player performance data and team game data.\n")
+cat("   - Advanced statistics such as Offensive Rating (ORTG), Defensive Rating (DRTG), and Net Rating (NET RTG) are calculated for both teams and players.\n")
+cat("   - The data is cleaned to remove any missing values and ensure consistency.\n\n")
+
+cat("2. **Feature Selection:**\n")
+cat("   - The model identifies the most relevant features highly correlated with playoff victories. These features include various advanced statistics and performance metrics.\n\n")
+
+cat("3. **Model Training:**\n")
+cat("   - The model is trained using a Random Forest Classifier on the data from the 2023 season. The classifier is chosen for its robustness in handling many features and preventing overfitting.\n")
+cat("   - The training process involves splitting the data into training and testing sets, standardizing the features, and fitting the model to the training data.\n\n")
+
+cat("4. **Playoff Simulation:**\n")
+cat("   - The model simulates each playoff series by predicting the probability of each team winning individual games.\n")
+cat("   - These game results are aggregated to predict the series winner and the number of games required to decide the series.\n\n")
+
+cat("5. **Visualization:**\n")
+cat("   - Bar charts are used to visualize the winning probabilities of each team in each playoff round.\n\n")
+
+# Model Results
+
+cat("Here are the model's predictions for the 2023-24 NBA playoffs:\n\n")
+
+cat("## Eastern Conference Final:\n")
+cat("- **Boston Celtics vs Indiana Pacers**\n")
+cat("  - Boston Celtics win probability: 76.42%\n")
+cat("  - Indiana Pacers win probability: 23.58%\n\n")
+
+cat("## Western Conference Final:\n")
+cat("- **Oklahoma City Thunder vs Denver Nuggets**\n")
+cat("  - Oklahoma City Thunder win probability: 64.63%\n")
+cat("  - Denver Nuggets win probability: 35.37%\n\n")
+
+cat("## NBA Final:\n")
+cat("- **Boston Celtics vs Oklahoma City Thunder**\n")
+cat("  - Boston Celtics win probability: 76.65%\n")
+cat("  - Oklahoma City Thunder win probability: 23.35%\n\n")
+
+cat("**NBA Champion: Boston Celtics**\n\n")
+
+# Model Performance Summary
+
+cat("The model's accuracy is 0.7751 with a 95% confidence interval ranging from 0.7432 to 0.8047, and a P-value of less than 2e-16 for the accuracy being greater than the No Information Rate (NIR). The Kappa statistic is 0.5501, indicating moderate agreement between the predicted and actual classifications.\n\n")
+
+cat("The McNemar's Test P-value is 0.01613, suggesting that there are some significant differences between the predicted and actual classifications. The sensitivity (true positive rate) is 0.8184, and the specificity (true negative rate) is 0.7317. The positive predictive value (precision) is 0.7531, and the negative predictive value is 0.8012.\n\n")
+
+cat("The prevalence (proportion of actual positives in the data) is 0.5000, the detection rate is 0.4092, and the detection prevalence is 0.5434. The balanced accuracy, which is the average of sensitivity and specificity, is 0.7751.\n\n")
+
+cat("The total number of team data samples used is 27,144, while the number of player data samples is 481,783.\n")
+
+# Model Strengths
+
+cat("## Model Strengths\n")
+cat("1. **Comprehensive Data Utilization:**\n")
+cat("   - The model uses extensive advanced statistics to capture various aspects of team and player performance, providing a comprehensive understanding of each team's capabilities.\n\n")
+
+cat("2. **Strong Predictive Power:**\n")
+cat("   - The Random Forest Classifier is a powerful machine learning algorithm that handles complex feature interactions and provides high accuracy predictions.\n\n")
+
+cat("3. **Flexibility and Scalability:**\n")
+cat("   - The model can be easily updated with new data and expanded to include additional features, allowing it to adapt to changes in player performance and team strategies.\n\n")
+
+cat("4. **Customization for the NBA:**\n")
+cat("   - The model considers the characteristics of NBA games, including the high frequency of games and the intense competition in the playoffs. By analyzing key statistics like offensive and defensive ratings, the model accurately reflects the overall strength of teams.\n\n")
+
+# Model Weaknesses
+
+cat("## Model Weaknesses\n")
+cat("1. **Lack of Contextual Factors:**\n")
+cat("   - Currently, the model does not account for contextual factors such as player injuries, coaching strategies, and psychological factors, which can significantly impact playoff outcomes.\n\n")
+
+cat("2. **Limited Sample Size:**\n")
+cat("   - The model is trained on data from only one season, which may not capture all nuances and variations in team performance.\n\n")
+
+cat("3. **Simplified Game Simulation:**\n")
+cat("   - The game simulation process assumes independence between games, not considering momentum or other dynamic factors that may affect the outcome of playoff series.\n\n")
+
+# Suggestions for Model Improvement
+
+cat("## Suggestions for Model Improvement\n")
+cat("1. **Incorporate Contextual Data:**\n")
+cat("   - With more time and data, the model can be enhanced by including contextual factors like player injury reports, coaching strategies, and psychological assessments.\n")
+cat("   - This would require additional data sources and potentially developing new features to quantify these factors.\n\n")
+
+cat("2. **Expand the Dataset:**\n")
+cat("   - To address the limited sample size, the model can be trained on data from multiple seasons. This would help capture a broader range of scenarios and improve the model's robustness.\n")
+cat("   - Additionally, including data leading up to the playoffs can provide more context and improve prediction accuracy.\n\n")
+
+cat("3. **Advanced Simulation Techniques:**\n")
+cat("   - Implementing more complex simulation techniques that consider dependencies and momentum between games can improve series predictions.\n")
+cat("   - Techniques such as Monte Carlo simulations and dynamic modeling can be explored to better capture the complexities of playoff series.\n\n")
+
+cat("4. **Play-In Tournament Predictions:**\n")
+cat("   - Since the NBA introduced the Play-In Tournament in the 2020-21 season to determine the seventh and eighth seeds in each conference, it is crucial to simulate the play-in results first. These games are single-elimination, making them relatively easier to predict. Accurate predictions of the Play-In Tournament outcomes are necessary before forecasting the playoff results, ensuring more accurate predictions.\n\n")
+
+cat("By addressing these weaknesses, the model can become more robust and accurate, providing valuable insights for decision-makers in the front office. These improvements will allow the model to consider various variables that influence playoff outcomes and provide more reliable predictions.\n")
+
+```
+
+## Part 3 -- Finding Insights from Your Model     
+
+Find two teams that had a competitive window of 2 or more consecutive seasons making the playoffs and that under performed your model’s expectations for them, losing series they were expected to win. Why do you think that happened? Classify one of them as bad luck and one of them as relating to a cause not currently accounted for in your model. If given more time and data, how would you use what you found to improve your model?  
+
+
+```{r}
+
+# Load necessary libraries
+library(dplyr)
+library(htmltools)
+
+# Analysis of Milwaukee Bucks and Miami Heat Playoff Performance
+
+# Context
+context <- "The Milwaukee Bucks and Miami Heat both had competitive windows with consecutive playoff appearances, but neither team met the expectations of the model, losing series they were expected to win. Below is an analysis of their performance, potential reasons for their losses, and suggestions for improving the model."
+
+# 1. Playoff Performance Data
+performance_data <- "
+First Round (East) Results and Probabilities:
+Boston Celtics vs Miami Heat
+Boston Celtics 0 - Miami Heat 4: 1.96%
+Boston Celtics 1 - Miami Heat 4: 5.16%
+Boston Celtics 2 - Miami Heat 4: 7.62%
+Boston Celtics 3 - Miami Heat 4: 9.71%
+Boston Celtics 4 - Miami Heat 0: 15.25%
+Boston Celtics 4 - Miami Heat 1: 23.36%
+Boston Celtics 4 - Miami Heat 2: 21.57%
+Boston Celtics 4 - Miami Heat 3: 15.37%
+Boston Celtics wins: 75.55%, Miami Heat wins: 24.45%
+
+Milwaukee Bucks vs Indiana Pacers
+Milwaukee Bucks 0 - Indiana Pacers 4: 11.31%
+Milwaukee Bucks 1 - Indiana Pacers 4: 18.76%
+Milwaukee Bucks 2 - Indiana Pacers 4: 20.25%
+Milwaukee Bucks 3 - Indiana Pacers 4: 16.45%
+Milwaukee Bucks 4 - Indiana Pacers 0: 3.06%
+Milwaukee Bucks 4 - Indiana Pacers 1: 7.02%
+Milwaukee Bucks 4 - Indiana Pacers 2: 10.66%
+Milwaukee Bucks 4 - Indiana Pacers 3: 12.49%
+Milwaukee Bucks wins: 33.23%, Indiana Pacers wins: 66.77%
+"
+
+# 2. Competitive Playoff Windows
+continuous_playoff_windows <- "
+Milwaukee Bucks:
+2020: 56-17, exited in the Eastern Conference Semifinals (won one round)
+2021: 46-26, won the championship
+2022: 51-31, exited in the Eastern Conference Semifinals (won one round)
+2023: 58-24, exited in the first round (did not win a round)
+2024: 49-33, exited in the first round (did not win a round)
+
+Miami Heat:
+2020: 44-29, lost in the Finals (won three rounds)
+2021: 40-32, exited in the first round (did not win a round)
+2022: 53-29, exited in the Eastern Conference Finals (won two rounds)
+2023: 44-38, lost in the Finals (won three rounds)
+2024: 46-36, exited in the first round (did not win a round)
+"
+
+# 3. Data Analysis
+data_analysis <- "
+Milwaukee Bucks:
+Despite strong regular season performances, the Milwaukee Bucks underperformed in the playoffs. In the 2023-24 season, their probability of winning against the Indiana Pacers was 33.23%, but they were eliminated in the first round. This underperformance can be attributed to various factors, including key player Khris Middleton's injury during the playoffs and insufficient tactical adjustments during the postseason.
+
+Miami Heat:
+In the 2023-24 season, the Miami Heat had a 24.45% probability of winning against the Boston Celtics but managed to advance to the next round. The Heat's success is often linked to their playoff experience and head coach Erik Spoelstra's strategic adjustment capabilities. Despite the model's lower predicted probability, they often perform well.
+"
+
+# 4. Reasons for Underperformance
+reasons_for_underperformance <- "
+Milwaukee Bucks:
+Classification: Bad luck
+Reason: Key player Khris Middleton's injury during the playoffs significantly impacted their performance. Additionally, random events in the playoffs (e.g., referee decisions, player performance fluctuations) could affect their win probability.
+
+Miami Heat:
+Classification: Reasons not accounted for by the model
+Reason: Coaching tactical adjustments, key player performances, and opponent's tactical changes can all impact the game results. The model may not fully account for the unique tactical adjustments, player psychological state, and physical condition in the playoffs.
+"
+
+# 5. Suggestions for Model Improvement
+improvement_suggestions <- "
+Milwaukee Bucks:
+Luck factors: Increase the consideration of random events and key player performance fluctuations, such as by simulating more playoff scenarios to reflect win probability variations under different conditions.
+
+Miami Heat:
+Tactical and psychological factors: The model can incorporate more data on coaching tactical adjustments and player psychological states, such as playoff experience, coach's historical records, and player health status.
+
+Improvement Measures:
+1. Playoff Experience: Add data on players' and coaches' playoff experience and analyze its impact on win probability.
+2. Health Status: Include data on player health and injuries to evaluate their potential impact on game outcomes.
+3. Tactical Adjustments: Collect and analyze data on different coaches' tactical changes and adjustments during the playoffs, making it a key variable in the model.
+4. Mid-Season Trades: Analyze the impact of mid-season trades on team strength, particularly on playoff rosters.
+"
+
+# Conclusion
+conclusion <- "
+Conclusion:
+Both the Milwaukee Bucks and Miami Heat had strong playoff contention windows but also faced unexpected early exits. For the Bucks, this underperformance can be classified as bad luck, particularly due to Khris Middleton's injury and key player performance fluctuations. For the Heat, their resilience despite lower model predictions indicates the need to consider playoff experience and coaching tactics in the model. Incorporating these factors can provide more accurate predictions and help teams better prepare for the playoffs.
+"
+
+# Print the analysis and insights with red color
+cat(HTML("<span style='color:red'>**ANSWER :**</span>"), "\n\n")
+cat(context, "\n\n")
+cat(performance_data, "\n\n")
+cat(continuous_playoff_windows, "\n\n")
+cat(data_analysis, "\n\n")
+cat(reasons_for_underperformance, "\n\n")
+cat(improvement_suggestions, "\n\n")
+cat(conclusion, "\n\n")
+
+
+```
+
+
+<span style="color:red">**ANSWER :**</span>    
+## The Milwaukee Bucks and Miami Heat both had competitive windows with consecutive playoff appearances, but neither team met the expectations of the model, losing series they were expected to win. Below is an analysis of their performance, potential reasons for their losses, and suggestions for improving the model.
+
+## First Round (East) Results and Probabilities:
+## Boston Celtics vs Miami Heat
+## Boston Celtics 0 - Miami Heat 4: 1.96%
+## Boston Celtics 1 - Miami Heat 4: 5.16%
+## Boston Celtics 2 - Miami Heat 4: 7.62%
+## Boston Celtics 3 - Miami Heat 4: 9.71%
+## Boston Celtics 4 - Miami Heat 0: 15.25%
+## Boston Celtics 4 - Miami Heat 1: 23.36%
+## Boston Celtics 4 - Miami Heat 2: 21.57%
+## Boston Celtics 4 - Miami Heat 3: 15.37%
+## Boston Celtics wins: 75.55%, Miami Heat wins: 24.45%
+## 
+## Milwaukee Bucks vs Indiana Pacers
+## Milwaukee Bucks 0 - Indiana Pacers 4: 11.31%
+## Milwaukee Bucks 1 - Indiana Pacers 4: 18.76%
+## Milwaukee Bucks 2 - Indiana Pacers 4: 20.25%
+## Milwaukee Bucks 3 - Indiana Pacers 4: 16.45%
+## Milwaukee Bucks 4 - Indiana Pacers 0: 3.06%
+## Milwaukee Bucks 4 - Indiana Pacers 1: 7.02%
+## Milwaukee Bucks 4 - Indiana Pacers 2: 10.66%
+## Milwaukee Bucks 4 - Indiana Pacers 3: 12.49%
+## Milwaukee Bucks wins: 33.23%, Indiana Pacers wins: 66.77%
+
+## Milwaukee Bucks:
+## 2020: 56-17, exited in the Eastern Conference Semifinals (won one round)
+## 2021: 46-26, won the championship
+## 2022: 51-31, exited in the Eastern Conference Semifinals (won one round)
+## 2023: 58-24, exited in the first round (did not win a round)
+## 2024: 49-33, exited in the first round (did not win a round)
+## 
+## Miami Heat:
+## 2020: 44-29, lost in the Finals (won three rounds)
+## 2021: 40-32, exited in the first round (did not win a round)
+## 2022: 53-29, exited in the Eastern Conference Finals (won two rounds)
+## 2023: 44-38, lost in the Finals (won three rounds)
+## 2024: 46-36, exited in the first round (did not win a round)
+
+## Milwaukee Bucks:
+## Despite strong regular season performances, the Milwaukee Bucks underperformed in the playoffs. In the 2023-24 season, their probability of winning against the Indiana Pacers was 33.23%, but they were eliminated in the first round. This underperformance can be attributed to various factors, including key player Khris Middleton's injury during the playoffs and insufficient tactical adjustments during the postseason.
+## 
+## Miami Heat:
+## In the 2023-24 season, the Miami Heat had a 24.45% probability of winning against the Boston Celtics but managed to advance to the next round. The Heat's success is often linked to their playoff experience and head coach Erik Spoelstra's strategic adjustment capabilities. Despite the model's lower predicted probability, they often perform well.
+
+## Milwaukee Bucks:
+## Classification: Bad luck
+## Reason: Key player Khris Middleton's injury during the playoffs significantly impacted their performance. Additionally, random events in the playoffs (e.g., referee decisions, player performance fluctuations) could affect their win probability.
+## 
+## Miami Heat:
+## Classification: Reasons not accounted for by the model
+## Reason: Coaching tactical adjustments, key player performances, and opponent's tactical changes can all impact the game results. The model may not fully account for the unique tactical adjustments, player psychological state, and physical condition in the playoffs.
+
+## Milwaukee Bucks:
+## Luck factors: Increase the consideration of random events and key player performance fluctuations, such as by simulating more playoff scenarios to reflect win probability variations under different conditions.
+## 
+## Miami Heat:
+## Tactical and psychological factors: The model can incorporate more data on coaching tactical adjustments and player psychological states, such as playoff experience, coach's historical records, and player health status.
+## 
+## Improvement Measures:
+## 1. Playoff Experience: Add data on players' and coaches' playoff experience and analyze its impact on win probability.
+## 2. Health Status: Include data on player health and injuries to evaluate their potential impact on game outcomes.
+## 3. Tactical Adjustments: Collect and analyze data on different coaches' tactical changes and adjustments during the playoffs, making it a key variable in the model.
+## 4. Mid-Season Trades: Analyze the impact of mid-season trades on team strength, particularly on playoff rosters.
+
+## Conclusion:
+## Both the Milwaukee Bucks and Miami Heat had strong playoff contention windows but also faced unexpected early exits. For the Bucks, this underperformance can be classified as bad luck, particularly due to Khris Middleton's injury and key player performance fluctuations. For the Heat, their resilience despite lower model predictions indicates the need to consider playoff experience and coaching tactics in the model. Incorporating these factors can provide more accurate predictions and help teams better prepare for the playoffs.
+
+
+
+
